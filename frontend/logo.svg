@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200" role="img" aria-labelledby="titleDesc">
+  <title id="titleDesc">trovvin.do logo — black and white</title>
+
+  <!-- Left icon: rounded square (black) -->
+  <rect x="20" y="20" width="160" height="160" rx="28" ry="28" fill="#000"/>
+
+  <!-- Play triangle (white) -->
+  <polygon points="75,70 125,100 75,130" fill="#fff" />
+
+  <!-- Download shaft (white) -->
+  <rect x="96" y="110" width="8" height="20" rx="3" ry="3" fill="#fff" />
+
+  <!-- Download arrow head (white) -->
+  <polygon points="92,134 100,144 108,134" fill="#fff" />
+
+  <!-- Optional small notch where arrow meets rounded-square (creates the combined icon look) -->
+  <!-- (This is purely visual; remove if you prefer a cleaner square edge) -->
+  <path d="M100 160 L100 148" stroke="#fff" stroke-width="0" fill="none"/>
+
+  <!-- Site text -->
+  <g transform="translate(220,0)">
+    <!-- Use a bold, modern sans-serif; fallback to system fonts if not available -->
+    <text x="0" y="122" font-family="Montserrat, 'Helvetica Neue', Arial, sans-serif"
+          font-size="72" font-weight="700" fill="#000" letter-spacing="-1">
+      trovvin.do
+    </text>
+  </g>
+
+  <!-- Accessibility: invisible background for consistent bounding box -->
+  <rect x="0" y="0" width="800" height="200" fill="none" />
+</svg>

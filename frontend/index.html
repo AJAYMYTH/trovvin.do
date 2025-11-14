@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>trovvin.do - Video Downloader</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="background-animation">
+        <div class="gradient-orb orb-1"></div>
+        <div class="gradient-orb orb-2"></div>
+        <div class="gradient-orb orb-3"></div>
+    </div>
+
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="logo">
+                <img src="logo.svg" alt="trovvin.do logo" class="logo-image">
+                <span>trovvin.do</span>
+            </div>
+            <div class="nav-links">
+                <a href="#home" class="nav-link active">Home</a>
+                <a href="#about" class="nav-link">About</a>
+                <a href="#faq" class="nav-link">FAQ</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container" id="home">
+        <div id="welcomeMessage" class="welcome-banner" style="display: none;"></div>
+
+        <div class="hero-section">
+            <h1 class="hero-title">
+                Download YouTube Videos
+                <span class="gradient-text">Instantly</span>
+            </h1>
+            <p class="hero-subtitle">
+                High quality downloads with automatic format detection. Fast, simple, and reliable.
+            </p>
+        </div>
+
+        <div class="download-card">
+            <div class="card-header">
+                <h2>Enter YouTube URL</h2>
+                <p>Paste your link and we'll handle the rest</p>
+            </div>
+
+            <form id="downloadForm">
+                <div class="input-container">
+                    <div class="input-wrapper">
+                        <svg class="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" fill="currentColor"/>
+                        </svg>
+                        <input 
+                            type="text" 
+                            id="videoUrl" 
+                            placeholder="https://www.youtube.com/watch?v=..."
+                            autocomplete="off"
+                        >
+                        <div class="input-loader" id="urlLoader"></div>
+                    </div>
+                </div>
+
+                <div id="videoInfo" class="video-preview" style="display: none;">
+                    <div class="preview-content">
+                        <div class="thumbnail-wrapper">
+                            <img id="thumbnail" src="" alt="Video thumbnail">
+                            <div class="thumbnail-overlay">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M8 5v14l11-7z" fill="white"/>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="preview-details">
+                            <h3 id="videoTitle">Loading...</h3>
+                            <div class="preview-meta">
+                                <span id="videoDuration" class="meta-item">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+                                        <path d="M12 6v6l4 2" stroke="currentColor" stroke-width="2"/>
+                                    </svg>
+                                    --:--
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="options-grid">
+                    <div class="option-group">
+                        <label class="option-label">Media Type</label>
+                        <div class="toggle-group">
+                            <input type="radio" name="mediaType" id="videoType" value="video" checked>
+                            <label for="videoType" class="toggle-option">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                    <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="currentColor"/>
+                                </svg>
+                                Video
+                            </label>
+                            <input type="radio" name="mediaType" id="audioType" value="audio">
+                            <label for="audioType" class="toggle-option">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                    <path d="M12 3v9.28c-.47-.17-.97-.28-1.5-.28C8.01 12 6 14.01 6 16.5S8.01 21 10.5 21c2.31 0 4.2-1.75 4.45-4H15V6h4V3h-7z" fill="currentColor"/>
+                                </svg>
+                                Audio
+                            </label>
+                        </div>
+                    </div>
+
+                    <div id="videoOptions" class="format-options">
+                        <div class="option-group">
+                            <label for="videoFormat" class="option-label">Format</label>
+                            <select id="videoFormat" class="custom-select">
+                                <option value="mp4">MP4</option>
+                                <option value="webm">WebM</option>
+                                <option value="mkv">MKV</option>
+                            </select>
+                        </div>
+
+                        <div class="option-group">
+                            <label for="videoQuality" class="option-label">Quality</label>
+                            <select id="videoQuality" class="custom-select" disabled>
+                                <option value="auto">Auto-detecting...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="audioOptions" class="format-options" style="display: none;">
+                        <div class="option-group">
+                            <label for="audioFormat" class="option-label">Format</label>
+                            <select id="audioFormat" class="custom-select">
+                                <option value="mp3">MP3</option>
+                                <option value="m4a">M4A</option>
+                                <option value="opus">Opus</option>
+                                <option value="wav">WAV</option>
+                            </select>
+                        </div>
+
+                        <div class="option-group">
+                            <label for="audioQuality" class="option-label">Quality</label>
+                            <select id="audioQuality" class="custom-select" disabled>
+                                <option value="auto">Auto-detecting...</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="download-btn" id="downloadBtn" disabled>
+                    <span class="btn-content">
+                        <svg class="btn-icon" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="currentColor"/>
+                        </svg>
+                        <span class="btn-text">Paste URL to Start</span>
+                    </span>
+                    <span class="btn-shimmer"></span>
+                </button>
+            </form>
+
+            <div id="statusMessage" class="status-message"></div>
+        </div>
+
+        <!-- Recent Downloads Section -->
+        <div id="recentDownloads" class="recent-downloads-section" style="display: none;">
+            <div class="download-card">
+                <div class="card-header">
+                    <h2>Recent Downloads</h2>
+                    <button onclick="clearDownloadHistory()" class="clear-history-btn" title="Clear history">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/>
+                        </svg>
+                        Clear All
+                    </button>
+                </div>
+                <div class="recent-list"></div>
+            </div>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="currentColor"/>
+                    </svg>
+                </div>
+                <h3>Auto Quality Detection</h3>
+                <p>Automatically selects the best available quality for your downloads</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9z" fill="currentColor"/>
+                    </svg>
+                </div>
+                <h3>Lightning Fast</h3>
+                <p>Direct streaming downloads with real-time progress tracking</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" fill="currentColor"/>
+                    </svg>
+                </div>
+                <h3>Secure & Private</h3>
+                <p>No data stored on our servers. Direct download to your device</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- About Section -->
+    <section id="about" class="about-section">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">About trovvin.do</h2>
+                <p class="section-subtitle">Your trusted platform for seamless YouTube downloads</p>
+            </div>
+            
+            <div class="about-content">
+                <div class="about-card">
+                    <div class="about-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                            <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <h3>Privacy First</h3>
+                    <p>We don't store any of your data. All downloads are processed in real-time and streamed directly to your device. Your privacy is our priority.</p>
+                </div>
+
+                <div class="about-card">
+                    <div class="about-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                            <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <h3>Simple & Fast</h3>
+                    <p>No registration required. Just paste the URL, select your preferred quality and format, and download instantly. It's that simple.</p>
+                </div>
+
+                <div class="about-card">
+                    <div class="about-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+                            <path d="M20 6h-2.18c.11-.31.18-.65.18-1 0-1.66-1.34-3-3-3-1.05 0-1.96.54-2.5 1.35l-.5.67-.5-.68C10.96 2.54 10.05 2 9 2 7.34 2 6 3.34 6 5c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM9 4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm11 15H4v-2h16v2zm0-5H4V8h5.08L7 10.83 8.62 12 11 8.76l1-1.36 1 1.36L15.38 12 17 10.83 14.92 8H20v6z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <h3>Multiple Formats</h3>
+                    <p>Support for various video and audio formats including MP4, WebM, MKV for videos and MP3, M4A, Opus for audio with quality options up to 4K.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section id="faq" class="faq-section">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Frequently Asked Questions</h2>
+                <p class="section-subtitle">Everything you need to know about our service</p>
+            </div>
+
+            <div class="faq-container">
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <h3>Is this service free to use?</h3>
+                        <svg class="faq-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <path d="M7 10l5 5 5-5z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Yes, trovvin.do is completely free to use. There are no hidden fees, subscriptions, or registration requirements. Simply paste your YouTube URL and download.</p>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <h3>What video qualities are available?</h3>
+                        <svg class="faq-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <path d="M7 10l5 5 5-5z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div class="faq-answer">
+                        <p>We support all available qualities from 144p up to 4K (2160p), depending on what's available for the specific video. The system automatically detects available formats.</p>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <h3>Can I download audio only?</h3>
+                        <svg class="faq-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <path d="M7 10l5 5 5-5z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Absolutely! You can choose to download audio-only files in formats like MP3, M4A, Opus, or WAV. Just select the "Audio" option before downloading.</p>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <h3>Is my data stored on your servers?</h3>
+                        <svg class="faq-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <path d="M7 10l5 5 5-5z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div class="faq-answer">
+                        <p>No, we don't store any files on our servers. All downloads are streamed directly to your device in real-time. We value your privacy and don't track your downloads.</p>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <h3>How long does a download take?</h3>
+                        <svg class="faq-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <path d="M7 10l5 5 5-5z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div class="faq-answer">
+                        <p>Download speed depends on your internet connection and the video size. Most downloads start immediately and complete within seconds to a few minutes.</p>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">
+                        <h3>Are there any download limits?</h3>
+                        <svg class="faq-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
+                            <path d="M7 10l5 5 5-5z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div class="faq-answer">
+                        <p>There are no download limits. You can download as many videos as you want, whenever you want. Enjoy unlimited downloads with no restrictions.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-brand">
+                <div class="footer-logo">
+                    <img src="logo.svg" alt="trovvin.do logo" class="footer-logo-image">
+                    <span>trovvin.do</span>
+                </div>
+                <p class="footer-description">Fast, secure, and reliable YouTube video downloader. Download your favorite videos in high quality.</p>
+            </div>
+
+            <div class="footer-links">
+                <div class="footer-column">
+                    <h4>Quick Links</h4>
+                    <ul>
+                        <li><a href="#home">Home</a></li>
+                        <li><a href="#about">About</a></li>
+                        <li><a href="#faq">FAQ</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-column">
+                    <h4>Support</h4>
+                    <ul>
+                        <li><a href="help-center.html">Help Center</a></li>
+                        <li><a href="contact.html">Contact Us</a></li>
+                        <li><a href="report-issue.html">Report Issue</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-column">
+                    <h4>Legal</h4>
+                    <ul>
+                        <li><a href="terms-of-service.html">Terms of Service</a></li>
+                        <li><a href="privacy-policy.html">Privacy Policy</a></li>
+                        <li><a href="disclaimer.html">Disclaimer</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer-bottom">
+            <p>&copy; 2025 trovvin.do. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
