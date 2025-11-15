@@ -1,26 +1,20 @@
-# backend/Dockerfile
 FROM node:18-bullseye
 
-# Install python/pip and ffmpeg for yt-dlp
 RUN apt-get update && \
     apt-get install -y python3 python3-pip ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
-# Install yt-dlp via pip
 RUN pip3 install -U yt-dlp
 
-# Set workdir and copy package files first (cache npm install)
 WORKDIR /app
+
 COPY package*.json ./
 
-# Install npm dependencies
-RUN npm ci --production
+# FIXED — no package-lock.json → use npm install, NOT npm ci
+RUN npm install --production
 
-# Copy app source
 COPY . .
 
-# Expose port (Render provides PORT at runtime)
-EXPOSE 10000
+EXPOSE 3000
 
-# Use environment PORT (Render provides PORT), fallback 10000
-CMD ["bash", "-lc", "exec npm start"]
+CMD ["npm", "start"]
