@@ -2,7 +2,7 @@
 const API_CONFIG = {
     // Change this to your backend URL when deploying
     BASE_URL: window.location.hostname === 'localhost' 
-        ? 'http://localhost:3000' 
+        ? 'https://trovvin-do.onrender.com' 
         : ' https://trovvin-do.onrender.com',
     
     ENDPOINTS: {
