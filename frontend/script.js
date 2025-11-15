@@ -186,11 +186,21 @@ function initializeEventListeners() {
         const url = e.target.value.trim();
         
         if (isValidYouTubeUrl(url)) {
+            // Clear any previous error messages
+            const statusMessage = elements.statusMessage;
+            if (statusMessage.classList.contains('error')) {
+                statusMessage.style.display = 'none';
+            }
+            
             debounceTimer = setTimeout(() => {
                 handleAutoFetch();
-            }, 800);
+            }, 1000);  // Increased delay to 1 second for better UX
+        } else if (url.length > 10) {
+            // Only show error if URL is long enough
+            state.isInfoFetched = false;
+            resetUI();
         } else {
-            // Reset UI if invalid URL
+            // Just reset UI for short inputs
             state.isInfoFetched = false;
             resetUI();
         }
@@ -203,6 +213,8 @@ function initializeEventListeners() {
             const url = elements.videoUrlInput.value.trim();
             if (isValidYouTubeUrl(url)) {
                 handleAutoFetch();
+            } else if (url.length > 10) {
+                showStatus('⚠️ Invalid YouTube URL format', 'error');
             }
         }, 100);
     });
@@ -215,11 +227,14 @@ function initializeEventListeners() {
 
 // ========== URL Validation ==========
 function isValidYouTubeUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    
     const patterns = [
-        /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=)[a-zA-Z0-9_-]{11}/,
-        /^(https?:\/\/)?(www\.)?(youtu\.be\/)[a-zA-Z0-9_-]{11}/,
-        /^(https?:\/\/)?(www\.)?(youtube\.com\/embed\/)[a-zA-Z0-9_-]{11}/,
-        /^(https?:\/\/)?(www\.)?(youtube\.com\/shorts\/)[a-zA-Z0-9_-]{11}/
+        /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=[a-zA-Z0-9_-]{11})/,
+        /^(https?:\/\/)?(www\.)?(youtu\.be\/[a-zA-Z0-9_-]{11})/,
+        /^(https?:\/\/)?(www\.)?(youtube\.com\/embed\/[a-zA-Z0-9_-]{11})/,
+        /^(https?:\/\/)?(www\.)?(youtube\.com\/shorts\/[a-zA-Z0-9_-]{11})/,
+        /^(https?:\/\/)?(m\.)?(youtube\.com\/watch\?v=[a-zA-Z0-9_-]{11})/  // Mobile URLs
     ];
     return patterns.some(pattern => pattern.test(url));
 }
@@ -231,11 +246,13 @@ async function handleAutoFetch() {
     const videoUrl = elements.videoUrlInput.value.trim();
     
     if (!isValidYouTubeUrl(videoUrl)) {
+        showStatus('Please enter a valid YouTube URL', 'error');
         return;
     }
     
     state.isFetching = true;
     elements.urlLoader.classList.add('active');
+    showStatus('Fetching video information...', 'info');
     
     try {
         const response = await fetch(getApiUrl('VIDEO_INFO'), {
@@ -245,13 +262,25 @@ async function handleAutoFetch() {
         });
         
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Failed to fetch video info');
+            let errorMsg = 'Failed to fetch video info';
+            try {
+                const error = await response.json();
+                errorMsg = error.message || errorMsg;
+            } catch (e) {
+                // Response wasn't JSON
+            }
+            throw new Error(errorMsg);
         }
         
         const data = await response.json();
+        
+        // Validate the response data
+        if (!data || !data.title) {
+            throw new Error('Invalid video data received');
+        }
+        
         state.videoInfo = data;
-        state.availableFormats = data.formats;
+        state.availableFormats = data.formats || [];
         state.isInfoFetched = true;
         
         displayVideoInfo(data);
@@ -261,7 +290,7 @@ async function handleAutoFetch() {
         
     } catch (error) {
         console.error('Fetch error:', error);
-        showStatus('Could not fetch video info. Please check the URL.', 'error');
+        showStatus('❌ Could not fetch video info: ' + error.message, 'error');
         state.isInfoFetched = false;
         resetUI();
     } finally {

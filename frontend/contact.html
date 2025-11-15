@@ -230,6 +230,24 @@
 
     <script src="script.js"></script>
     <script>
+        // LocalStorage keys
+        const CONTACT_MESSAGES_KEY = 'trovvin_contact_messages';
+        
+        // Function to save contact message to localStorage
+        function saveContactToLocalStorage(contactData) {
+            try {
+                const existingMessages = JSON.parse(localStorage.getItem(CONTACT_MESSAGES_KEY) || '[]');
+                existingMessages.unshift(contactData); // Add to beginning
+                // Keep only last 50 messages
+                const limitedMessages = existingMessages.slice(0, 50);
+                localStorage.setItem(CONTACT_MESSAGES_KEY, JSON.stringify(limitedMessages));
+                return true;
+            } catch (error) {
+                console.error('Error saving to localStorage:', error);
+                return false;
+            }
+        }
+        
         // Contact form handling
         document.getElementById('contactForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -243,14 +261,20 @@
             
             // Collect form data
             const formData = {
+                id: Date.now(),
                 name: document.getElementById('name').value,
                 email: document.getElementById('email').value,
                 subject: document.getElementById('subject').value,
                 category: document.getElementById('category').value,
-                message: document.getElementById('message').value
+                message: document.getElementById('message').value,
+                timestamp: new Date().toISOString()
             };
             
             try {
+                // Save to localStorage first
+                const savedLocally = saveContactToLocalStorage(formData);
+                
+                // Still send to backend for logging (optional)
                 const response = await fetch(getApiUrl('SUBMIT_CONTACT'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -259,16 +283,24 @@
                 
                 const result = await response.json();
                 
-                if (result.success) {
-                    statusMessage.textContent = '✓ Message sent successfully! We\'ll get back to you soon.';
+                if (result.success || savedLocally) {
+                    statusMessage.textContent = '✓ Message saved successfully in local storage! We\'ll get back to you soon.';
                     statusMessage.className = 'status-message success';
                     document.getElementById('contactForm').reset();
                 } else {
                     throw new Error(result.message || 'Failed to send message');
                 }
             } catch (error) {
-                statusMessage.textContent = '✗ ' + error.message;
-                statusMessage.className = 'status-message error';
+                // Even if backend fails, if saved locally it's okay
+                const savedLocally = saveContactToLocalStorage(formData);
+                if (savedLocally) {
+                    statusMessage.textContent = '✓ Message saved locally! (Server connection failed, but your message is stored)';
+                    statusMessage.className = 'status-message success';
+                    document.getElementById('contactForm').reset();
+                } else {
+                    statusMessage.textContent = '✗ ' + error.message;
+                    statusMessage.className = 'status-message error';
+                }
             }
             
             // Re-enable button

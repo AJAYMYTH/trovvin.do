@@ -2,43 +2,29 @@ const express = require('express');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const compression = require('compression');
-const cors = require('cors');
 require('dotenv').config();
 
-// Database configuration
-const db = require('./db-config');
-let dbAvailable = false;
+const fsPromises = fs.promises;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5500';
 
-// CORS Configuration
-const corsOptions = {
-    origin: function (origin, callback) {
-        // Allow requests with no origin (mobile apps, Postman, etc.)
-        if (!origin) return callback(null, true);
-        
-        const allowedOrigins = [
-            FRONTEND_URL,
-            'http://localhost:5500',
-            'http://127.0.0.1:5500',
-            // Add your production frontend URLs here
-        ];
-        
-        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-};
-
-app.use(cors(corsOptions));
+// CORS Configuration - Allow all origins for development
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+    
+    next();
+});
 
 // Performance Optimizations
 app.use(compression()); // Enable GZIP compression
@@ -48,17 +34,7 @@ app.set('x-powered-by', false); // Hide Express signature
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// Helper function to get client IP
-function getClientIP(req) {
-    return req.headers['x-forwarded-for']?.split(',')[0] || 
-           req.connection.remoteAddress || 
-           req.socket.remoteAddress;
-}
 
-// Test database connection on startup
-(async () => {
-    dbAvailable = await db.testConnection();
-})();
 
 // Video info endpoint
 app.post('/video-info', async (req, res) => {
@@ -72,6 +48,7 @@ app.post('/video-info', async (req, res) => {
         const args = [
             '--dump-json',
             '--no-warnings',
+            '--no-check-certificates',  // Skip certificate check for some regions
             url
         ];
         
@@ -91,7 +68,7 @@ app.post('/video-info', async (req, res) => {
             if (code !== 0) {
                 console.error('yt-dlp error:', errorOutput);
                 return res.status(500).json({ 
-                    message: 'Failed to fetch video info. Check URL or yt-dlp installation.'
+                    message: 'Failed to fetch video info. The URL may be invalid or the video may be unavailable.'
                 });
             }
             
@@ -115,7 +92,7 @@ app.post('/video-info', async (req, res) => {
         ytDlp.on('error', (error) => {
             console.error('Spawn error:', error);
             res.status(500).json({ 
-                message: 'Failed to execute yt-dlp. Make sure it is installed.',
+                message: 'Failed to execute yt-dlp. Make sure it is installed and in PATH.',
                 error: error.message 
             });
         });
@@ -129,155 +106,203 @@ app.post('/video-info', async (req, res) => {
     }
 });
 
+function buildDownloadArgs(url, mediaType, format, quality, outputTemplate) {
+    const baseArgs = [
+        '--no-warnings',
+        '--no-check-certificates',
+        '--retries', '10',
+        '--fragment-retries', '10',
+        '--socket-timeout', '30'
+    ];
+
+    if (mediaType === 'audio') {
+        const audioQuality = quality && quality !== 'best' ? String(quality) : '0';
+
+        return [
+            ...baseArgs,
+            '-f', 'bestaudio/best',
+            '-x',
+            '--audio-format', format,
+            '--audio-quality', audioQuality,
+            '--embed-metadata',
+            '--embed-thumbnail',
+            '--no-mtime',
+            '-o', outputTemplate,
+            url
+        ];
+    }
+
+    const isNumericQuality = quality && quality !== 'best' && !isNaN(Number(quality));
+    const selectorParts = [];
+
+    if (isNumericQuality) {
+        selectorParts.push(
+            `bestvideo[height<=${quality}][ext=mp4]+bestaudio[ext=m4a]`,
+            `bestvideo[height<=${quality}]+bestaudio`
+        );
+    }
+
+    selectorParts.push(
+        'bestvideo[ext=mp4]+bestaudio[ext=m4a]',
+        'bestvideo+bestaudio',
+        'best[ext=mp4]',
+        'best'
+    );
+
+    const formatSelector = selectorParts.join('/');
+
+    return [
+        ...baseArgs,
+        '-f', formatSelector,
+        '--merge-output-format', format,
+        '--embed-metadata',
+        '--no-mtime',
+        '-o', outputTemplate,
+        url
+    ];
+}
+
 // Download endpoint - GET method for direct browser downloads
 app.get('/download', async (req, res) => {
     const { url, mediaType, format, quality } = req.query;
-    
-    // Validate input
+
     if (!url || !mediaType || !format) {
         return res.status(400).send('Missing required parameters');
     }
-    
+
     console.log('Download request:', { url, mediaType, format, quality });
-    
+
     try {
-        // First, get the video title
         const titleArgs = [
             '--get-title',
             '--no-warnings',
+            '--no-check-certificates',
             url
         ];
-        
+
         const titleProcess = spawn('yt-dlp', titleArgs);
         let videoTitle = '';
-        
+        let titleError = '';
+
         titleProcess.stdout.on('data', (data) => {
             videoTitle += data.toString();
         });
-        
+
+        titleProcess.stderr.on('data', (data) => {
+            const msg = data.toString();
+            titleError += msg;
+            console.log('yt-dlp title:', msg);
+        });
+
         await new Promise((resolve, reject) => {
             titleProcess.on('close', (code) => {
-                if (code === 0) resolve();
-                else reject(new Error('Failed to get video title'));
+                if (code === 0 && videoTitle.trim()) {
+                    resolve();
+                } else {
+                    console.error('Failed to get video title:', titleError || videoTitle);
+                    resolve();
+                }
             });
             titleProcess.on('error', reject);
         });
-        
-        // Clean up the title for filename use
-        videoTitle = videoTitle.trim()
-            .replace(/[<>:"/\\|?*]/g, '') // Remove invalid filename characters
-            .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-            .substring(0, 100); // Limit length
-        
-        const filename = videoTitle ? `${videoTitle}.${format}` : `video.${format}`;
-        
-        console.log('Video title:', videoTitle);
-        console.log('Filename:', filename);
-        
-        let ytDlpArgs = [];
-        
-        // Build download arguments based on media type
-        if (mediaType === 'audio') {
-            ytDlpArgs = [
-                '-x',
-                '--audio-format', format,
-                '-o', '-'
-            ];
-            
-            if (quality && quality !== 'auto' && quality !== 'best') {
-                ytDlpArgs.splice(1, 0, '--audio-quality', quality + 'K');
-            }
-        } else {
-            // Video download
-            let formatSelector;
-            
-            if (quality && quality !== 'auto' && quality !== 'best') {
-                formatSelector = `bestvideo[height<=${quality}]+bestaudio/best[height<=${quality}]/best`;
-            } else {
-                formatSelector = 'bestvideo+bestaudio/best';
-            }
-            
-            ytDlpArgs = [
-                '-f', formatSelector,
-                '--merge-output-format', format,
-                '--recode-video', format,
-                '-o', '-'
-            ];
-        }
-        
-        // Add URL at the end
-        ytDlpArgs.push(url);
-        
-        console.log('Executing: yt-dlp', ytDlpArgs.join(' '));
-        
-        // Set headers for download
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        
-        if (mediaType === 'audio') {
-            const audioMimeTypes = {
-                'mp3': 'audio/mpeg',
-                'm4a': 'audio/mp4',
-                'opus': 'audio/opus',
-                'wav': 'audio/wav'
-            };
-            res.setHeader('Content-Type', audioMimeTypes[format] || 'application/octet-stream');
-        } else {
-            const videoMimeTypes = {
-                'mp4': 'video/mp4',
-                'webm': 'video/webm',
-                'mkv': 'video/x-matroska'
-            };
-            res.setHeader('Content-Type', videoMimeTypes[format] || 'application/octet-stream');
-        }
-        
-        // Spawn yt-dlp and pipe to response
+
+        let safeTitle = (videoTitle || '').trim()
+            .replace(/[<>:"/\\|?*]/g, '')
+            .replace(/\s+/g, ' ')
+            .substring(0, 100);
+
+        const filename = safeTitle ? `${safeTitle}.${format}` : `video.${format}`;
+
+        console.log('Resolved filename:', filename);
+
+        const tempDir = path.join(os.tmpdir(), 'trovvin-do-downloads');
+        await fsPromises.mkdir(tempDir, { recursive: true });
+        const tempFileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${format}`;
+        const tempFilePath = path.join(tempDir, tempFileName);
+
+        const ytDlpArgs = buildDownloadArgs(url, mediaType, format, quality, tempFilePath);
+
+        console.log('Executing yt-dlp with args:', ytDlpArgs.join(' '));
+
         const downloadProcess = spawn('yt-dlp', ytDlpArgs);
-        
-        let hasError = false;
-        let errorMessage = '';
-        
-        // Pipe stdout to response
-        downloadProcess.stdout.pipe(res);
-        
-        // Log stderr
+
+        let errorOutput = '';
+
         downloadProcess.stderr.on('data', (data) => {
-            const message = data.toString();
-            console.log('yt-dlp:', message);
-            
-            if (message.toLowerCase().includes('error')) {
-                hasError = true;
-                errorMessage += message;
-            }
+            const msg = data.toString();
+            errorOutput += msg;
+            console.log('yt-dlp:', msg);
         });
-        
-        downloadProcess.on('close', (code) => {
-            if (code !== 0) {
-                console.error('yt-dlp exited with code:', code);
-                console.error('Error details:', errorMessage);
-                
-                if (!res.headersSent) {
-                    res.status(500).send('Download failed. Please try again.');
+
+        await new Promise((resolve, reject) => {
+            downloadProcess.on('close', (code) => {
+                if (code === 0) {
+                    resolve();
+                } else {
+                    console.error('yt-dlp exited with code:', code);
+                    console.error('yt-dlp error output:', errorOutput);
+                    reject(new Error('yt-dlp failed with code ' + code));
                 }
+            });
+
+            downloadProcess.on('error', (error) => {
+                reject(error);
+            });
+        });
+
+        try {
+            const stats = await fsPromises.stat(tempFilePath);
+            if (!stats || stats.size === 0) {
+                throw new Error('Downloaded file is empty');
+            }
+
+            const stream = fs.createReadStream(tempFilePath);
+
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+            if (mediaType === 'audio') {
+                const audioMimeTypes = {
+                    mp3: 'audio/mpeg',
+                    m4a: 'audio/mp4',
+                    opus: 'audio/opus',
+                    wav: 'audio/wav'
+                };
+                res.setHeader('Content-Type', audioMimeTypes[format] || 'application/octet-stream');
             } else {
-                console.log('Download completed successfully');
+                const videoMimeTypes = {
+                    mp4: 'video/mp4',
+                    webm: 'video/webm',
+                    mkv: 'video/x-matroska'
+                };
+                res.setHeader('Content-Type', videoMimeTypes[format] || 'application/octet-stream');
             }
-        });
-        
-        downloadProcess.on('error', (error) => {
-            console.error('Process error:', error);
-            if (!res.headersSent) {
-                res.status(500).send('Failed to start download. Make sure yt-dlp is installed.');
-            }
-        });
-        
-        // Handle client disconnect
-        req.on('close', () => {
-            if (!res.writableEnded) {
-                console.log('Client disconnected, killing process');
-                downloadProcess.kill();
-            }
-        });
-        
+
+            stream.on('error', (error) => {
+                console.error('Stream error:', error);
+                if (!res.headersSent) {
+                    res.status(500).send('Failed to read downloaded file.');
+                } else {
+                    res.end();
+                }
+            });
+
+            stream.pipe(res);
+
+            stream.on('close', () => {
+                fsPromises.unlink(tempFilePath).catch((err) => {
+                    console.error('Failed to remove temp file:', err);
+                });
+            });
+
+            req.on('close', () => {
+                stream.destroy();
+            });
+
+        } catch (error) {
+            await fsPromises.unlink(tempFilePath).catch(() => {});
+            throw error;
+        }
+
     } catch (error) {
         console.error('Download error:', error);
         if (!res.headersSent) {
@@ -286,15 +311,8 @@ app.get('/download', async (req, res) => {
     }
 });
 
-// Submit Issue Report endpoint
+// Submit Issue Report endpoint - Data saved in browser's localStorage
 app.post('/submit-issue', async (req, res) => {
-    if (!dbAvailable) {
-        return res.status(503).json({ 
-            message: 'Database not available. Issue report saved locally.',
-            success: true // Still return success for UX
-        });
-    }
-
     try {
         const issueData = {
             issueType: req.body.issueType,
@@ -306,15 +324,16 @@ app.post('/submit-issue', async (req, res) => {
             stepsToReproduce: req.body.stepsToReproduce,
             email: req.body.email,
             severity: req.body.severity,
-            ipAddress: getClientIP(req),
-            userAgent: req.headers['user-agent']
+            timestamp: new Date().toISOString()
         };
 
-        await db.issueReports.create(issueData);
+        // Log to console for debugging (optional)
+        console.log('Issue report received:', issueData);
         
+        // Return success - data will be stored in browser's localStorage
         res.json({ 
             success: true,
-            message: 'Issue report submitted successfully' 
+            message: 'Issue report saved successfully in local storage' 
         });
     } catch (error) {
         console.error('Issue submission error:', error);
@@ -325,15 +344,8 @@ app.post('/submit-issue', async (req, res) => {
     }
 });
 
-// Submit Contact Message endpoint
+// Submit Contact Message endpoint - Data saved in browser's localStorage
 app.post('/submit-contact', async (req, res) => {
-    if (!dbAvailable) {
-        return res.status(503).json({ 
-            message: 'Database not available. Message saved locally.',
-            success: true
-        });
-    }
-
     try {
         const contactData = {
             name: req.body.name,
@@ -341,15 +353,16 @@ app.post('/submit-contact', async (req, res) => {
             subject: req.body.subject,
             category: req.body.category,
             message: req.body.message,
-            ipAddress: getClientIP(req),
-            userAgent: req.headers['user-agent']
+            timestamp: new Date().toISOString()
         };
 
-        await db.contactMessages.create(contactData);
+        // Log to console for debugging (optional)
+        console.log('Contact message received:', contactData);
         
+        // Return success - data will be stored in browser's localStorage
         res.json({ 
             success: true,
-            message: 'Message sent successfully' 
+            message: 'Message saved successfully in local storage' 
         });
     } catch (error) {
         console.error('Contact submission error:', error);
@@ -360,12 +373,8 @@ app.post('/submit-contact', async (req, res) => {
     }
 });
 
-// Log download analytics (optional)
+// Log download analytics - Data logged to console and stored in browser's localStorage
 app.post('/log-download', async (req, res) => {
-    if (!dbAvailable) {
-        return res.json({ success: true }); // Silently ignore if DB unavailable
-    }
-
     try {
         const analyticsData = {
             videoId: req.body.videoId,
@@ -375,10 +384,12 @@ app.post('/log-download', async (req, res) => {
             success: req.body.success,
             errorMessage: req.body.errorMessage,
             duration: req.body.duration,
-            ipAddress: getClientIP(req)
+            timestamp: new Date().toISOString()
         };
 
-        await db.downloadAnalytics.log(analyticsData);
+        // Log to console for debugging (optional)
+        console.log('Download analytics:', analyticsData);
+        
         res.json({ success: true });
     } catch (error) {
         console.error('Analytics logging error:', error);
@@ -395,7 +406,7 @@ app.listen(PORT, () => {
     console.log(`\n🚀 YouTube Downloader Server Running!`);
     console.log(`📍 Server: http://localhost:${PORT}`);
     console.log(`🌐 Allowed Frontend: ${FRONTEND_URL}`);
-    console.log(`📊 Database: ${dbAvailable ? 'Connected' : 'Disabled (Optional)'}`);
+    console.log(`💾 Storage: Chrome Local Storage (No Database)`);
     console.log(`\n💡 Make sure yt-dlp is installed:`);
     console.log(`   pip install yt-dlp`);
     console.log(`   or: pip3 install yt-dlp\n`);

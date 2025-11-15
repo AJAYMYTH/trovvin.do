@@ -293,6 +293,24 @@
 
     <script src="script.js"></script>
     <script>
+        // LocalStorage keys
+        const ISSUE_REPORTS_KEY = 'trovvin_issue_reports';
+        
+        // Function to save issue report to localStorage
+        function saveIssueToLocalStorage(issueData) {
+            try {
+                const existingReports = JSON.parse(localStorage.getItem(ISSUE_REPORTS_KEY) || '[]');
+                existingReports.unshift(issueData); // Add to beginning
+                // Keep only last 50 reports
+                const limitedReports = existingReports.slice(0, 50);
+                localStorage.setItem(ISSUE_REPORTS_KEY, JSON.stringify(limitedReports));
+                return true;
+            } catch (error) {
+                console.error('Error saving to localStorage:', error);
+                return false;
+            }
+        }
+        
         // Issue form handling
         document.getElementById('issueForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -307,6 +325,7 @@
             
             // Collect form data
             const formData = {
+                id: Date.now(),
                 issueType: document.getElementById('issueType').value,
                 issueTitle: document.getElementById('issueTitle').value,
                 videoUrl: document.getElementById('videoUrl').value,
@@ -315,10 +334,15 @@
                 description: document.getElementById('description').value,
                 stepsToReproduce: document.getElementById('stepsToReproduce').value,
                 email: document.getElementById('email').value,
-                severity: document.getElementById('severity').value
+                severity: document.getElementById('severity').value,
+                timestamp: new Date().toISOString()
             };
             
             try {
+                // Save to localStorage first
+                const savedLocally = saveIssueToLocalStorage(formData);
+                
+                // Still send to backend for logging (optional)
                 const response = await fetch(getApiUrl('SUBMIT_ISSUE'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -327,16 +351,24 @@
                 
                 const result = await response.json();
                 
-                if (result.success) {
-                    statusMessage.textContent = '✓ Issue report submitted successfully! We\'ll investigate and get back to you soon.';
+                if (result.success || savedLocally) {
+                    statusMessage.textContent = '✓ Issue report saved successfully in local storage! We\'ll investigate and get back to you soon.';
                     statusMessage.className = 'status-message success';
                     document.getElementById('issueForm').reset();
                 } else {
                     throw new Error(result.message || 'Submission failed');
                 }
             } catch (error) {
-                statusMessage.textContent = '✗ ' + error.message;
-                statusMessage.className = 'status-message error';
+                // Even if backend fails, if saved locally it's okay
+                const savedLocally = saveIssueToLocalStorage(formData);
+                if (savedLocally) {
+                    statusMessage.textContent = '✓ Issue report saved locally! (Server connection failed, but your report is stored)';
+                    statusMessage.className = 'status-message success';
+                    document.getElementById('issueForm').reset();
+                } else {
+                    statusMessage.textContent = '✗ ' + error.message;
+                    statusMessage.className = 'status-message error';
+                }
             }
             
             // Re-enable button
