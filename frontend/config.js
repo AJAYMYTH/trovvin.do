@@ -1,7 +1,7 @@
 // API Configuration
 const API_CONFIG = {
     // Change this to your backend URL when deploying
-    BASE_URL: window.location.hostname === 'localhost' 
+    BASE_URL: window.location.hostname === 'Render' 
         ? 'https://trovvin-do.onrender.com' 
         : ' https://trovvin-do.onrender.com',
     
