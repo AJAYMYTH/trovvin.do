@@ -34,6 +34,14 @@ app.set('x-powered-by', false); // Hide Express signature
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
+// Serve favicon
+app.get('/favicon.ico', (req, res) => {
+    res.sendFile(path.join(__dirname, 'favicon.ico'), (err) => {
+        if (err) {
+            res.status(404).end();
+        }
+    });
+});
 
 // Video info endpoint
 app.post('/video-info', async (req, res) => {
@@ -510,9 +518,73 @@ app.post('/log-download', async (req, res) => {
     }
 });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok' });
+// Health check endpoint with yt-dlp verification
+app.get('/health', async (req, res) => {
+    try {
+        // Test if yt-dlp is available
+        const commandsToTry = [
+            ['python3', ['-m', 'yt_dlp', '--version']],
+            ['python', ['-m', 'yt_dlp', '--version']],
+            ['yt-dlp', ['--version']]
+        ];
+        
+        let ytDlpWorking = false;
+        let version = null;
+        let workingCommand = null;
+        
+        for (const [command, args] of commandsToTry) {
+            try {
+                const ytDlp = spawn(command, args);
+                let output = '';
+                let errorOutput = '';
+                
+                ytDlp.stdout.on('data', (data) => {
+                    output += data.toString();
+                });
+                
+                ytDlp.stderr.on('data', (data) => {
+                    errorOutput += data.toString();
+                });
+                
+                await new Promise((resolve) => {
+                    ytDlp.on('close', (code) => {
+                        if (code === 0) {
+                            ytDlpWorking = true;
+                            version = output.trim() || errorOutput.trim();
+                            workingCommand = `${command} ${args.join(' ')}`;
+                        }
+                        resolve();
+                    });
+                });
+                
+                if (ytDlpWorking) {
+                    break;
+                }
+            } catch (error) {
+                // Continue to next command
+            }
+        }
+        
+        res.json({
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            ytDlp: {
+                installed: ytDlpWorking,
+                version: version,
+                command: workingCommand
+            },
+            environment: {
+                nodeVersion: process.version,
+                platform: process.platform,
+                arch: process.arch
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            error: error.message
+        });
+    }
 });
 
 app.listen(PORT, () => {
