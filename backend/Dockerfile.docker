@@ -6,6 +6,9 @@ RUN apt-get update && \
 
 RUN pip3 install -U yt-dlp
 
+# Create symlink for python to python3
+RUN ln -s /usr/bin/python3 /usr/bin/python
+
 WORKDIR /app
 
 COPY package*.json ./

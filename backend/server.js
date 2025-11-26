@@ -52,7 +52,30 @@ app.post('/video-info', async (req, res) => {
             url
         ];
         
-        const ytDlp = spawn('python', ['-m', 'yt_dlp', ...args]);
+        // Try different ways to call yt-dlp
+        let ytDlp;
+        const commandsToTry = [
+            ['python3', ['-m', 'yt_dlp', ...args]],
+            ['python', ['-m', 'yt_dlp', ...args]],
+            ['yt-dlp', args]
+        ];
+        
+        let lastError = null;
+        for (const [command, cmdArgs] of commandsToTry) {
+            try {
+                ytDlp = spawn(command, cmdArgs);
+                // If we get here without an exception, break out of the loop
+                break;
+            } catch (error) {
+                lastError = error;
+                console.log(`Failed to spawn ${command}:`, error.message);
+            }
+        }
+        
+        if (!ytDlp) {
+            throw new Error(`Failed to spawn yt-dlp with any method. Last error: ${lastError?.message || 'Unknown error'}`);
+        }
+        
         let output = '';
         let errorOutput = '';
         
@@ -180,7 +203,30 @@ app.get('/download', async (req, res) => {
             url
         ];
 
-        const titleProcess = spawn('python', ['-m', 'yt_dlp', ...titleArgs]);
+        // Try different ways to call yt-dlp for title extraction
+        let titleProcess;
+        const commandsToTry = [
+            ['python3', ['-m', 'yt_dlp', ...titleArgs]],
+            ['python', ['-m', 'yt_dlp', ...titleArgs]],
+            ['yt-dlp', titleArgs]
+        ];
+        
+        let lastError = null;
+        for (const [command, cmdArgs] of commandsToTry) {
+            try {
+                titleProcess = spawn(command, cmdArgs);
+                // If we get here without an exception, break out of the loop
+                break;
+            } catch (error) {
+                lastError = error;
+                console.log(`Failed to spawn ${command} for title:`, error.message);
+            }
+        }
+        
+        if (!titleProcess) {
+            throw new Error(`Failed to spawn yt-dlp for title with any method. Last error: ${lastError?.message || 'Unknown error'}`);
+        }
+
         let videoTitle = '';
         let titleError = '';
 
@@ -224,7 +270,29 @@ app.get('/download', async (req, res) => {
 
         console.log('Executing yt-dlp with args:', ytDlpArgs.join(' '));
 
-        const downloadProcess = spawn('python', ['-m', 'yt_dlp', ...ytDlpArgs]);
+        // Try different ways to call yt-dlp for download
+        let downloadProcess;
+        const downloadCommandsToTry = [
+            ['python3', ['-m', 'yt_dlp', ...ytDlpArgs]],
+            ['python', ['-m', 'yt_dlp', ...ytDlpArgs]],
+            ['yt-dlp', ytDlpArgs]
+        ];
+        
+        lastError = null;
+        for (const [command, cmdArgs] of downloadCommandsToTry) {
+            try {
+                downloadProcess = spawn(command, cmdArgs);
+                // If we get here without an exception, break out of the loop
+                break;
+            } catch (error) {
+                lastError = error;
+                console.log(`Failed to spawn ${command} for download:`, error.message);
+            }
+        }
+        
+        if (!downloadProcess) {
+            throw new Error(`Failed to spawn yt-dlp for download with any method. Last error: ${lastError?.message || 'Unknown error'}`);
+        }
 
         let errorOutput = '';
 
