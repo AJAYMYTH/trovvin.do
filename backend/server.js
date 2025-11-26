@@ -52,7 +52,7 @@ app.post('/video-info', async (req, res) => {
             url
         ];
         
-        const ytDlp = spawn('yt-dlp', args);
+        const ytDlp = spawn('python', ['-m', 'yt_dlp', ...args]);
         let output = '';
         let errorOutput = '';
         
@@ -180,7 +180,7 @@ app.get('/download', async (req, res) => {
             url
         ];
 
-        const titleProcess = spawn('yt-dlp', titleArgs);
+        const titleProcess = spawn('python', ['-m', 'yt_dlp', ...titleArgs]);
         let videoTitle = '';
         let titleError = '';
 
@@ -224,7 +224,7 @@ app.get('/download', async (req, res) => {
 
         console.log('Executing yt-dlp with args:', ytDlpArgs.join(' '));
 
-        const downloadProcess = spawn('yt-dlp', ytDlpArgs);
+        const downloadProcess = spawn('python', ['-m', 'yt_dlp', ...ytDlpArgs]);
 
         let errorOutput = '';
 

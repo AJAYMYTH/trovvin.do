@@ -268,6 +268,7 @@ async function handleAutoFetch() {
                 errorMsg = error.message || errorMsg;
             } catch (e) {
                 // Response wasn't JSON
+                errorMsg = `Server error (${response.status}): ${response.statusText}`;
             }
             throw new Error(errorMsg);
         }
@@ -416,6 +417,17 @@ function getSelectedMediaType() {
 async function handleDownload(e) {
     e.preventDefault();
     
+    // Check if backend is reachable
+    try {
+        const healthResponse = await fetch(getApiUrl('HEALTH'));
+        if (!healthResponse.ok) {
+            throw new Error('Backend server is not responding');
+        }
+    } catch (error) {
+        showStatus('❌ Server error: ' + error.message, 'error');
+        return;
+    }
+    
     const videoUrl = elements.videoUrlInput.value.trim();
     
     // Validate URL
@@ -458,12 +470,13 @@ async function handleDownload(e) {
     });
     
     // Build download URL with parameters
-    const downloadUrl = getApiUrl('DOWNLOAD') + '?' + new URLSearchParams({
-        url: videoUrl,
-        mediaType: mediaType,
-        format: format,
-        quality: quality
-    });
+    const params = new URLSearchParams();
+    params.append('url', videoUrl);
+    params.append('mediaType', mediaType);
+    params.append('format', format);
+    params.append('quality', quality);
+    
+    const downloadUrl = `${getApiUrl('DOWNLOAD')}?${params.toString()}`;
     
     // Show status
     showStatus('Starting download... Check your browser\'s download manager!', 'info');
@@ -472,18 +485,24 @@ async function handleDownload(e) {
     elements.downloadBtn.disabled = true;
     
     // Create a hidden link and trigger download
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    
-    // Clean up after a short delay
-    setTimeout(() => {
-        document.body.removeChild(a);
-        showStatus('Download started! Check your browser downloads (Ctrl+J)', 'success');
+    try {
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        
+        // Clean up after a short delay
+        setTimeout(() => {
+            document.body.removeChild(a);
+            showStatus('Download started! Check your browser downloads (Ctrl+J)', 'success');
+            elements.downloadBtn.disabled = false;
+        }, 100);
+    } catch (error) {
+        console.error('Download error:', error);
+        showStatus('❌ Download failed: ' + error.message, 'error');
         elements.downloadBtn.disabled = false;
-    }, 100);
+    }
 }
 
 // ========== UI Helper Functions ==========
