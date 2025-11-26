@@ -35,12 +35,14 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 
-
 // Video info endpoint
 app.post('/video-info', async (req, res) => {
     const { url } = req.body;
     
+    console.log('Received video-info request with URL:', url);
+    
     if (!url) {
+        console.error('Validation Error: URL is missing in request body');
         return res.status(400).json({ message: 'URL is required' });
     }
     
@@ -52,6 +54,8 @@ app.post('/video-info', async (req, res) => {
             url
         ];
         
+        console.log('Attempting to spawn yt-dlp with args:', args);
+        
         // Try different ways to call yt-dlp
         let ytDlp;
         const commandsToTry = [
@@ -61,9 +65,12 @@ app.post('/video-info', async (req, res) => {
         ];
         
         let lastError = null;
+        let successfulCommand = null;
         for (const [command, cmdArgs] of commandsToTry) {
             try {
+                console.log(`Trying to spawn: ${command} with args:`, cmdArgs);
                 ytDlp = spawn(command, cmdArgs);
+                successfulCommand = command;
                 // If we get here without an exception, break out of the loop
                 break;
             } catch (error) {
@@ -73,29 +80,39 @@ app.post('/video-info', async (req, res) => {
         }
         
         if (!ytDlp) {
-            throw new Error(`Failed to spawn yt-dlp with any method. Last error: ${lastError?.message || 'Unknown error'}`);
+            const errorMsg = `Failed to spawn yt-dlp with any method. Last error: ${lastError?.message || 'Unknown error'}`;
+            console.error(errorMsg);
+            throw new Error(errorMsg);
         }
+        
+        console.log(`Successfully spawned yt-dlp using command: ${successfulCommand}`);
         
         let output = '';
         let errorOutput = '';
         
         ytDlp.stdout.on('data', (data) => {
             output += data.toString();
+            console.log('yt-dlp stdout:', data.toString());
         });
         
         ytDlp.stderr.on('data', (data) => {
             errorOutput += data.toString();
+            console.log('yt-dlp stderr:', data.toString());
         });
         
         ytDlp.on('close', (code) => {
+            console.log(`yt-dlp process exited with code ${code}`);
             if (code !== 0) {
-                console.error('yt-dlp error:', errorOutput);
+                console.error('yt-dlp error output:', errorOutput);
                 return res.status(500).json({ 
-                    message: 'Failed to fetch video info. The URL may be invalid or the video may be unavailable.'
+                    message: 'Failed to fetch video info. The URL may be invalid or the video may be unavailable.',
+                    error: errorOutput,
+                    code: code
                 });
             }
             
             try {
+                console.log('yt-dlp output:', output);
                 const data = JSON.parse(output);
                 
                 res.json({
@@ -108,7 +125,12 @@ app.post('/video-info', async (req, res) => {
                 });
             } catch (parseError) {
                 console.error('JSON parse error:', parseError);
-                res.status(500).json({ message: 'Failed to parse video info' });
+                console.error('Raw output:', output);
+                res.status(500).json({ 
+                    message: 'Failed to parse video info',
+                    error: parseError.message,
+                    rawOutput: output
+                });
             }
         });
         
@@ -189,11 +211,12 @@ function buildDownloadArgs(url, mediaType, format, quality, outputTemplate) {
 app.get('/download', async (req, res) => {
     const { url, mediaType, format, quality } = req.query;
 
+    console.log('Download request received:', { url, mediaType, format, quality });
+
     if (!url || !mediaType || !format) {
+        console.error('Missing required parameters:', { url, mediaType, format });
         return res.status(400).send('Missing required parameters');
     }
-
-    console.log('Download request:', { url, mediaType, format, quality });
 
     try {
         const titleArgs = [
@@ -202,6 +225,8 @@ app.get('/download', async (req, res) => {
             '--no-check-certificates',
             url
         ];
+
+        console.log('Attempting to get video title with args:', titleArgs);
 
         // Try different ways to call yt-dlp for title extraction
         let titleProcess;
@@ -212,9 +237,12 @@ app.get('/download', async (req, res) => {
         ];
         
         let lastError = null;
+        let successfulCommand = null;
         for (const [command, cmdArgs] of commandsToTry) {
             try {
+                console.log(`Trying to spawn: ${command} for title extraction with args:`, cmdArgs);
                 titleProcess = spawn(command, cmdArgs);
+                successfulCommand = command;
                 // If we get here without an exception, break out of the loop
                 break;
             } catch (error) {
@@ -224,7 +252,9 @@ app.get('/download', async (req, res) => {
         }
         
         if (!titleProcess) {
-            throw new Error(`Failed to spawn yt-dlp for title with any method. Last error: ${lastError?.message || 'Unknown error'}`);
+            const errorMsg = `Failed to spawn yt-dlp for title with any method. Last error: ${lastError?.message || 'Unknown error'}`;
+            console.error(errorMsg);
+            throw new Error(errorMsg);
         }
 
         let videoTitle = '';
@@ -232,24 +262,30 @@ app.get('/download', async (req, res) => {
 
         titleProcess.stdout.on('data', (data) => {
             videoTitle += data.toString();
+            console.log('yt-dlp title stdout:', data.toString());
         });
 
         titleProcess.stderr.on('data', (data) => {
             const msg = data.toString();
             titleError += msg;
-            console.log('yt-dlp title:', msg);
+            console.log('yt-dlp title stderr:', msg);
         });
 
         await new Promise((resolve, reject) => {
             titleProcess.on('close', (code) => {
+                console.log(`yt-dlp title process exited with code ${code}`);
                 if (code === 0 && videoTitle.trim()) {
+                    console.log('Successfully got video title:', videoTitle.trim());
                     resolve();
                 } else {
                     console.error('Failed to get video title:', titleError || videoTitle);
                     resolve();
                 }
             });
-            titleProcess.on('error', reject);
+            titleProcess.on('error', (error) => {
+                console.error('yt-dlp title process error:', error);
+                reject(error);
+            });
         });
 
         let safeTitle = (videoTitle || '').trim()
@@ -279,9 +315,12 @@ app.get('/download', async (req, res) => {
         ];
         
         lastError = null;
+        successfulCommand = null;
         for (const [command, cmdArgs] of downloadCommandsToTry) {
             try {
+                console.log(`Trying to spawn: ${command} for download with args:`, cmdArgs);
                 downloadProcess = spawn(command, cmdArgs);
+                successfulCommand = command;
                 // If we get here without an exception, break out of the loop
                 break;
             } catch (error) {
@@ -291,7 +330,9 @@ app.get('/download', async (req, res) => {
         }
         
         if (!downloadProcess) {
-            throw new Error(`Failed to spawn yt-dlp for download with any method. Last error: ${lastError?.message || 'Unknown error'}`);
+            const errorMsg = `Failed to spawn yt-dlp for download with any method. Last error: ${lastError?.message || 'Unknown error'}`;
+            console.error(errorMsg);
+            throw new Error(errorMsg);
         }
 
         let errorOutput = '';
@@ -299,12 +340,14 @@ app.get('/download', async (req, res) => {
         downloadProcess.stderr.on('data', (data) => {
             const msg = data.toString();
             errorOutput += msg;
-            console.log('yt-dlp:', msg);
+            console.log('yt-dlp download stderr:', msg);
         });
 
         await new Promise((resolve, reject) => {
             downloadProcess.on('close', (code) => {
+                console.log(`yt-dlp download process exited with code ${code}`);
                 if (code === 0) {
+                    console.log('Download completed successfully');
                     resolve();
                 } else {
                     console.error('yt-dlp exited with code:', code);
@@ -314,6 +357,7 @@ app.get('/download', async (req, res) => {
             });
 
             downloadProcess.on('error', (error) => {
+                console.error('yt-dlp download process error:', error);
                 reject(error);
             });
         });
@@ -367,6 +411,7 @@ app.get('/download', async (req, res) => {
             });
 
         } catch (error) {
+            console.error('File handling error:', error);
             await fsPromises.unlink(tempFilePath).catch(() => {});
             throw error;
         }
